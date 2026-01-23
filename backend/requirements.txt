@@ -1,0 +1,35 @@
+# Core
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-multipart==0.0.6
+
+# LangGraph & LangChain
+langgraph==0.0.66
+langchain==0.1.6
+langchain-community==0.0.20
+
+# Ollama
+ollama==0.1.6
+
+# YOLO
+ultralytics==8.1.0
+
+# Vector Store
+qdrant-client==1.7.0
+
+# Document Processing
+pypdf==4.0.1
+python-docx==1.1.0
+
+# Utilities
+httpx==0.26.0
+Pillow==10.2.0
+numpy==1.26.3
+aiofiles==23.2.1
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0
