@@ -32,8 +32,9 @@ def should_use_rag(state: AgentState) -> Literal["rag", "decision"]:
         logger.info("User query provided, routing to RAG agent")
         return "rag"
     
-    logger.info("No disease or query, skipping RAG")
-    return "decision"
+    # NEW: Always use RAG to provide comprehensive care guide even for healthy plants
+    logger.info("No disease detected, but routing to RAG for general care guide")
+    return "rag"
 
 
 def response_node(state: AgentState) -> AgentState:
@@ -116,6 +117,7 @@ analysis_graph = create_analysis_graph()
 async def run_analysis_pipeline(
     image_bytes: bytes,
     query: str = None,
+    sensor_data: dict = None,
     settings: Settings = None
 ) -> dict:
     """
@@ -124,6 +126,7 @@ async def run_analysis_pipeline(
     Args:
         image_bytes: Raw image bytes
         query: Optional user query
+        sensor_data: Optional IoT sensor readings
         settings: Application settings
         
     Returns:
@@ -137,7 +140,8 @@ async def run_analysis_pipeline(
     # Create initial state
     initial_state = create_initial_state(
         image_bytes=image_bytes,
-        query=query
+        query=query,
+        sensor_data=sensor_data
     )
     
     # Add settings to state for agents to use

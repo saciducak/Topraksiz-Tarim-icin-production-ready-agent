@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import ReactMarkdown from 'react-markdown';
 import { BiLeaf, BiScan, BiCheckShield, BiError, BiInfoCircle, BiTimeFive, BiChevronRight, BiLoaderAlt } from 'react-icons/bi';
+import SensorPanel from '../components/SensorPanel';
 
 interface Detection {
     class_name: string;
@@ -42,6 +43,17 @@ export default function Home() {
     const [result, setResult] = useState<AnalysisResult | null>(null);
     const [error, setError] = useState<string | null>(null);
 
+    // New: IoT Sensor State
+    const [sensorData, setSensorData] = useState({
+        ph: '6.5',
+        ec: '2.0',
+        temperature: '22'
+    });
+
+    const updateSensorData = (key: keyof typeof sensorData, value: string) => {
+        setSensorData(prev => ({ ...prev, [key]: value }));
+    };
+
     const onDrop = useCallback((acceptedFiles: File[]) => {
         const file = acceptedFiles[0];
         if (file) {
@@ -76,6 +88,8 @@ export default function Home() {
         try {
             const formData = new FormData();
             formData.append('file', selectedImage);
+            // Append sensor data
+            formData.append('sensor_data', JSON.stringify(sensorData));
 
             const response = await fetch('/api/v1/analyze', {
                 method: 'POST',
@@ -160,6 +174,11 @@ export default function Home() {
                     )}
                 </div>
 
+                {/* IoT Sensor Panel */}
+                <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+                    <SensorPanel data={sensorData} onChange={updateSensorData} />
+                </div>
+
                 {selectedImage && !isAnalyzing && !result && (
                     <div style={{ textAlign: 'center', marginTop: '2rem' }}>
                         <button className="btn btn-primary" onClick={analyzeImage} style={{ minWidth: '200px', fontSize: '1.1rem' }}>
@@ -194,101 +213,105 @@ export default function Home() {
                 </div>
             )}
 
-            {/* Results Dashboard */}
+            {/* Results Report */}
             {result && (
                 <section className="results-dashboard">
-                    <div className="container">
-                        <h2 className="section-title">Analiz Paneli</h2>
+                    <div className="container" style={{ maxWidth: '1000px' }}>
 
-                        <div className="dashboard-grid">
+                        <div className="report-header" style={{ textAlign: 'center', marginBottom: '3rem' }}>
+                            <div className="report-badge">ANALİZ RAPORU</div>
+                            <h2 className="section-title" style={{ marginTop: '1rem', marginBottom: '0.5rem' }}>Bitki Sağlık Durumu</h2>
+                            <p style={{ color: 'var(--text-muted)' }}>Analiz ID: {result.id || 'N/A'} • {new Date().toLocaleDateString('tr-TR')}</p>
+                        </div>
 
-                            {/* Left Column: Diagnostics */}
-                            <div className="analysis-card">
-                                <div className="plant-health-score">
-                                    <div className={`score-circle ${getScoreColor(Math.round(calculateHealthScore(result)))}`}>
-                                        {Math.round(calculateHealthScore(result))}
-                                    </div>
-                                    <div className="score-label">Bitki Sağlık Puanı</div>
-                                </div>
+                        <div className="report-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) 2fr', gap: '2rem' }}>
 
-                                <div className="detection-summary">
-                                    <h4>Teşhis Sonuçları</h4>
-                                    {result.vision?.detections.length === 0 ? (
-                                        <div className="detection-tag" style={{ background: 'rgba(5, 150, 105, 0.1)', color: 'var(--primary)' }}>
-                                            <span>✅ Sağlıklı Görünüm</span>
+                            {/* Left: Quick Stats & Score */}
+                            <div className="report-sidebar">
+                                <div className="analysis-card" style={{ position: 'sticky', top: '100px' }}>
+                                    <div className="plant-health-score">
+                                        <div className={`score-circle ${getScoreColor(Math.round(calculateHealthScore(result)))}`}>
+                                            {Math.round(calculateHealthScore(result))}
                                         </div>
-                                    ) : (
-                                        result.vision?.detections.map((det, idx) => (
-                                            <div key={idx} style={{ marginBottom: '1rem' }}>
-                                                <div className="detection-tag">
-                                                    <span>{det.class_name}</span>
-                                                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                                                        %{Math.round(det.confidence * 100)} Güven
-                                                    </span>
-                                                </div>
-                                                <div className="confidence-bar">
-                                                    <div className="confidence-fill" style={{ width: `${det.confidence * 100}%` }}></div>
-                                                </div>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
+                                        <div className="score-label">Sağlık Puanı</div>
+                                    </div>
 
-                                <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
-                                    <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <BiCheckShield /> Sistem Özeti
-                                    </h4>
-                                    <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
-                                        {result.vision?.summary}
-                                    </p>
+                                    <div className="detection-summary">
+                                        <h4 style={{ fontSize: '0.95rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '1rem' }}>Tespit Edilen Bulgular</h4>
+                                        {result.vision?.detections.length === 0 ? (
+                                            <div className="detection-tag good">
+                                                <span>✅ Sağlıklı</span>
+                                            </div>
+                                        ) : (
+                                            result.vision?.detections.map((det, idx) => (
+                                                <div key={idx} style={{ marginBottom: '1rem' }}>
+                                                    <div className="detection-tag">
+                                                        <span>{det.class_name}</span>
+                                                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                                                            %{Math.round(det.confidence * 100)}
+                                                        </span>
+                                                    </div>
+                                                    <div className="confidence-bar">
+                                                        <div className="confidence-fill" style={{ width: `${det.confidence * 100}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+
+                                    <div className="action-required-box" style={{ marginTop: '2rem', padding: '1rem', background: 'var(--surface-alt)', borderRadius: 'var(--radius-md)' }}>
+                                        <h5 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                            <BiCheckShield /> Eylem Planı
+                                        </h5>
+                                        {result.recommendations.slice(0, 1).map((rec, i) => (
+                                            <div key={i}>
+                                                <p style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--primary-dark)' }}>{rec.action}</p>
+                                                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{rec.timeframe}</p>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
 
-                            {/* Right Column: Recommendations & RAG */}
-                            <div className="recommendations-wrapper">
-
-                                {/* Recommendations */}
-                                {result.recommendations.map((rec, idx) => (
-                                    <div key={idx} className={`rec-card ${rec.priority}`}>
-                                        <div className="rec-header">
-                                            <div className="rec-title">{rec.action}</div>
-                                            <div className="rec-priority">{rec.priority === 'high' ? 'Yüksek Öncelik' : 'Öneri'}</div>
-                                        </div>
-                                        <div className="rec-details">
-                                            {rec.details}
-                                        </div>
-                                        {rec.timeframe && (
-                                            <div className="rec-meta">
-                                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                    <BiTimeFive /> {rec.timeframe}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-
-                                {/* RAG Insight Card */}
+                            {/* Right: Detailed Report */}
+                            <div className="report-content">
+                                {/* AI Insight / RAG */}
                                 {result.rag && (
-                                    <div className="rag-insight-card">
-                                        <h3><BiInfoCircle /> Akıllı Tarım Asistanı</h3>
-                                        <div className="rag-content">
-                                            <ReactMarkdown>{result.rag.answer}</ReactMarkdown>
+                                    <div className="report-section card">
+                                        <div className="report-section-header" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
+                                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--secondary)' }}>
+                                                <BiInfoCircle /> Detaylı Analiz & Tedavi
+                                            </h3>
                                         </div>
-                                        <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)' }}>
-                                            Kullandığı Kaynaklar: {result.rag.sources.length} adet doğrulanmış tarım makalesi
+
+                                        <div className="markdown-content" style={{ lineHeight: 1.8, color: 'var(--text)' }}>
+                                            <ReactMarkdown
+                                                components={{
+                                                    h1: ({ node, ...props }) => <h4 style={{ fontSize: '1.2rem', color: 'var(--primary-dark)', marginTop: '1.5rem', marginBottom: '1rem' }} {...props} />,
+                                                    h2: ({ node, ...props }) => <h4 style={{ fontSize: '1.1rem', color: 'var(--secondary)', marginTop: '1.5rem', marginBottom: '0.5rem', borderLeft: '3px solid var(--primary)', paddingLeft: '0.75rem' }} {...props} />,
+                                                    ul: ({ node, ...props }) => <ul style={{ paddingLeft: '1.5rem', marginBottom: '1rem' }} {...props} />,
+                                                    li: ({ node, ...props }) => <li style={{ marginBottom: '0.5rem' }} {...props} />
+                                                }}
+                                            >
+                                                {result.rag.answer}
+                                            </ReactMarkdown>
+                                        </div>
+
+                                        <div className="source-citation" style={{ marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid var(--border)', fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <BiLeaf /> Kaynak: Future Harvest Bilgi Bankası tarafından doğrulanmıştır.
                                         </div>
                                     </div>
                                 )}
-
                             </div>
                         </div>
 
-                        {/* Try Again */}
-                        <div style={{ textAlign: 'center', marginTop: '3rem' }}>
-                            <button className="btn btn-secondary" onClick={removeImage}>
-                                Yeni Analiz Başlat
+                        {/* Scan New Button */}
+                        <div style={{ textAlign: 'center', marginTop: '4rem' }}>
+                            <button className="btn btn-secondary" onClick={removeImage} style={{ padding: '1rem 2.5rem' }}>
+                                🔄 Yeni Analiz Başlat
                             </button>
                         </div>
+
                     </div>
                 </section>
             )}

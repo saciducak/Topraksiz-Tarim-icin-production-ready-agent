@@ -62,10 +62,19 @@ async def decision_node(state: AgentState):
             for det in detections:
                 cls = det.get('class_name', 'Unknown')
                 confidence = det.get('confidence', 0)
+                # Clean string cleaning to avoid "jkh" or quotes
+                display_name = cls.replace('_', ' ').title().strip()
+                confidence_pct = int(confidence * 100)
+                
                 rec = {
-                    "action": f"{cls.replace('_', ' ').title()} Tedavisi",
+                    "action": f"{display_name} Müdahalesi",
                     "priority": "high" if confidence > 0.5 else "medium",
-                    "details": f"**Sorun:** {cls} (%{int(confidence*100)} güven). \n\n**Neden Önemli?** Bu hastalık bitki verimini ve kalitesini doğrudan etkiler.\n\n**Ne Yapılmalı?** Enfekte bölgeleri temizleyin. RAG analizindeki tedavi adımlarını izleyin.\n\n**Uyarı:** İlaçlamayı akşam serinliğinde yapın.",
+                    "details": (
+                        f"**Teşhis:** {display_name} (Güven: %{confidence_pct})\n\n"
+                        "Bu hastalık bitki sağlığını ciddi şekilde tehdit etmektedir. "
+                        "Aşağıdaki detaylı analiz raporundaki adımları dikkatle uygulayınız. "
+                        "Özellikle etkilenen yaprakların uzaklaştırılması ve uygun tedavi (kimyasal/organik) uygulanması önerilir."
+                    ),
                     "timeframe": "Acil (24-48 Saat)"
                 }
                 recommendations.append(rec)

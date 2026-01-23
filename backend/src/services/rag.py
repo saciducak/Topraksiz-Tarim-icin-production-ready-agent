@@ -227,7 +227,9 @@ async def generate_answer(
     query: str,
     context: list[dict],
     history: list[str] = None,
-    settings = None
+    settings = None,
+    custom_user_prompt: str = None,
+    custom_system_prompt: str = None
 ) -> str:
     """
     Generate an answer using Ollama LLM.
@@ -244,16 +246,20 @@ async def generate_answer(
         title = doc.get("title", f"Kaynak {i}")
         context_parts.append(f"[{title}]:\n{content}")
     
-    context_str = "\n\n".join(context_parts) if context_parts else "Bilgi tabanında ilgili kaynak bulunamadı."
+    context_str = "\n\n".join(context_parts) if context_parts else "Bilgi tabanında özel bir kaynak bulunamadı, genel bilgi kullanılıyor."
     
-    # Build prompt
-    system_prompt = """Sen tarım alanında uzman bir yapay zeka asistanısın. 
+    # Use custom system prompt if provided
+    system_prompt = custom_system_prompt or """Sen tarım alanında uzman bir yapay zeka asistanısın. 
 Çiftçilere bitki hastalıkları, zararlılar, gübreleme ve tarım uygulamaları konusunda yardımcı oluyorsun.
 Verilen bağlam bilgilerini kullanarak doğru ve pratik öneriler sun.
 Yanıtlarını Türkçe ver ve öz tut.
 Emin olmadığın konularda bir uzmana danışmayı öner."""
 
-    user_prompt = f"""Bağlam:
+    # Use custom user prompt if provided, otherwise default format
+    if custom_user_prompt:
+        user_prompt = f"{custom_user_prompt}\n\nREFERANS BAĞLAM:\n{context_str}"
+    else:
+        user_prompt = f"""Bağlam:
 {context_str}
 
 Soru: {query}

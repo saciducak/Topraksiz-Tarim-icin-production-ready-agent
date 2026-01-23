@@ -52,10 +52,18 @@ class ActionRecommendation(BaseModel):
     timeframe: Optional[str] = Field(None, description="Recommended timeframe")
 
 
+class SensorData(BaseModel):
+    """IoT sensor data."""
+    ph: Optional[float] = Field(None, description="Water pH level")
+    ec: Optional[float] = Field(None, description="Electrical Conductivity (mS/cm)")
+    temperature: Optional[float] = Field(None, description="Water Temperature (°C)")
+
+
 class AnalysisRequest(BaseModel):
     """Analysis request body."""
     query: Optional[str] = Field(None, description="Optional text query")
     include_rag: bool = Field(True, description="Include RAG search")
+    sensor_data: Optional[SensorData] = Field(None, description="IoT sensor data")
 
 
 class AnalysisResponse(BaseModel):

@@ -19,6 +19,7 @@ class AgentState(TypedDict):
     # Input
     image_bytes: Optional[bytes]
     query: Optional[str]
+    sensor_data: Optional[dict]  # New: IoT Sensor Data
     
     # Vision Agent Output
     detections: list[dict]
@@ -43,13 +44,15 @@ class AgentState(TypedDict):
 
 def create_initial_state(
     image_bytes: Optional[bytes] = None,
-    query: Optional[str] = None
+    query: Optional[str] = None,
+    sensor_data: Optional[dict] = None
 ) -> AgentState:
     """Create initial state for the agent workflow."""
     return AgentState(
         # Input
         image_bytes=image_bytes,
         query=query,
+        sensor_data=sensor_data,
         
         # Vision Agent Output
         detections=[],

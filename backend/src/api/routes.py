@@ -1,9 +1,10 @@
 """
 Topraksız Tarım AI Agent - API Routes
 """
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse
 import uuid
+import json
 from datetime import datetime
 import logging
 import io
@@ -12,7 +13,7 @@ from PIL import Image
 from .schemas import (
     AnalysisRequest, AnalysisResponse, AnalysisStatus,
     ChatRequest, ChatResponse, VisionAnalysis, RAGResult,
-    ActionRecommendation, Detection
+    ActionRecommendation, Detection, SensorData
 )
 from ..config import get_settings, Settings
 from ..agents.graph import run_analysis_pipeline
@@ -24,7 +25,8 @@ router = APIRouter()
 @router.post("/analyze", response_model=AnalysisResponse, tags=["Analysis"])
 async def analyze_image(
     file: UploadFile = File(...),
-    query: str = None,
+    query: str = Form(None),
+    sensor_data: str = Form(None),
     settings: Settings = Depends(get_settings)
 ):
     """
@@ -47,11 +49,21 @@ async def analyze_image(
     # Generate analysis ID
     analysis_id = str(uuid.uuid4())
     
+    # Parse sensor data
+    sensor_values = None
+    if sensor_data:
+        try:
+            sensor_values = json.loads(sensor_data)
+            logger.info(f"Received sensor data: {sensor_values}")
+        except Exception as e:
+            logger.warning(f"Failed to parse sensor data: {e}")
+    
     try:
         # Run the multi-agent pipeline
         result = await run_analysis_pipeline(
             image_bytes=contents,
             query=query,
+            sensor_data=sensor_values,
             settings=settings
         )
         
