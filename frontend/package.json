@@ -1,27 +1,33 @@
 {
-    "name": "topraksiz-tarim-frontend",
-    "version": "1.0.0",
+    "name": "frontend",
     "private": true,
+    "version": "0.0.0",
+    "type": "module",
     "scripts": {
-        "dev": "next dev",
-        "build": "next build",
-        "start": "next start",
-        "lint": "next lint"
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+        "preview": "vite preview"
     },
     "dependencies": {
-        "next": "13.5.6",
+        "axios": "^1.6.0",
+        "framer-motion": "^10.16.4",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-dropzone": "^14.2.3",
-        "react-icons": "^5.0.1",
-        "react-markdown": "^9.0.1"
+        "react-icons": "^4.11.0",
+        "react-markdown": "^9.0.0",
+        "react-router-dom": "^6.20.0",
+        "recharts": "^2.9.0"
     },
     "devDependencies": {
-        "@types/node": "^20",
-        "@types/react": "^18",
-        "@types/react-dom": "^18",
-        "eslint": "^8",
-        "eslint-config-next": "14.1.0",
-        "typescript": "^5"
+        "@types/react": "^18.2.37",
+        "@types/react-dom": "^18.2.15",
+        "@vitejs/plugin-react": "^4.2.0",
+        "eslint": "^8.53.0",
+        "eslint-plugin-react-hooks": "^4.6.0",
+        "eslint-plugin-react-refresh": "^0.4.4",
+        "typescript": "^5.2.2",
+        "vite": "^5.2.0"
     }
 }
