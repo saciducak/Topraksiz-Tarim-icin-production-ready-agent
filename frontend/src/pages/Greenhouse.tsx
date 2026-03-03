@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BiLeaf, BiPlus, BiTrendingUp, BiBarChart } from 'react-icons/bi';
+import { BiLeaf, BiPlus, BiTrendingUp, BiBarChart, BiInfoCircle } from 'react-icons/bi';
 
 interface Plant {
     id: string;
@@ -11,12 +11,11 @@ interface Plant {
 
 // Animation Variants
 const fadeInUp = {
-    hidden: { opacity: 0, y: 30, filter: 'blur(5px)' },
+    hidden: { opacity: 0, y: 20 },
     visible: {
         opacity: 1,
         y: 0,
-        filter: 'blur(0px)',
-        transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] }
+        transition: { duration: 0.5, ease: "easeOut" }
     }
 };
 
@@ -69,32 +68,32 @@ export default function Greenhouse() {
     };
 
     return (
-        <main className="container" style={{ paddingTop: '120px', paddingBottom: '80px' }}>
+        <main className="w-full max-w-7xl mx-auto px-6 pt-24 pb-20">
 
             {/* PAGE HEADER */}
             <motion.div
                 initial="hidden"
                 animate="visible"
                 variants={stagger}
-                style={{ marginBottom: '48px', display: 'flex', justifyContent: 'space-between', alignItems: 'end' }}
+                className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6"
             >
                 <motion.div variants={fadeInUp}>
-                    <div className="hero-badge" style={{ marginBottom: '16px' }}>
-                        <span className="dot"></span>
-                        CANLI İZLEME
+                    <div className="badge badge-primary mb-4 shadow-sm">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse mr-2"></span>
+                        CANLI SERA İZLEME
                     </div>
-                    <h1 style={{ fontSize: '2.5rem', marginBottom: '12px' }}>Dijital Sera Yönetimi</h1>
-                    <p style={{ maxWidth: '500px', color: '#888' }}>
+                    <h1 className="text-4xl font-bold text-slate-900 mb-3 tracking-tight">Dijital Sera Yönetimi</h1>
+                    <p className="text-slate-500 max-w-lg text-lg">
                         Bitkilerinizi kaydedin, gelişim süreçlerini takip edin ve AI destekli analizlerle verimi artırın.
                     </p>
                 </motion.div>
 
                 <motion.button
-                    className="btn btn-primary"
+                    className="btn btn-primary shadow-lg shadow-emerald-500/30"
                     variants={fadeInUp}
                     onClick={() => setIsAddMode(!isAddMode)}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                 >
                     <BiPlus size={20} /> Yeni Bitki Ekle
                 </motion.button>
@@ -107,30 +106,22 @@ export default function Greenhouse() {
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        style={{ overflow: 'hidden', marginBottom: '32px' }}
+                        className="overflow-hidden mb-8"
                     >
-                        <div className="analysis-card" style={{ display: 'flex', gap: '16px', alignItems: 'center', padding: '24px' }}>
-                            <div style={{ flex: 1 }}>
-                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: '#888', marginBottom: '8px', textTransform: 'uppercase' }}>BİTKİ ADI</label>
+                        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-md flex items-center gap-4">
+                            <div className="flex-1">
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">BİTKİ ADI / KONUMU</label>
                                 <input
                                     type="text"
                                     placeholder="Örn: Domates - Sera A - Sıra 1"
                                     value={newPlantName}
                                     onChange={(e) => setNewPlantName(e.target.value)}
-                                    style={{
-                                        width: '100%',
-                                        padding: '12px 16px',
-                                        borderRadius: '12px',
-                                        background: '#1a1a1a',
-                                        border: '1px solid #333',
-                                        color: 'white',
-                                        fontSize: '1rem'
-                                    }}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 text-base focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                                     autoFocus
                                 />
                             </div>
-                            <div style={{ paddingTop: '24px' }}>
-                                <button className="btn btn-primary" onClick={addPlant}>Kaydet</button>
+                            <div className="pt-6">
+                                <button className="btn btn-primary h-[50px] px-8" onClick={addPlant}>Kaydet</button>
                             </div>
                         </div>
                     </motion.div>
@@ -139,66 +130,52 @@ export default function Greenhouse() {
 
             {/* PLANT GRID */}
             {loading ? (
-                <div className="loading-container">
-                    <div className="spinner"></div>
+                <div className="py-20 flex justify-center">
+                    <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
                 </div>
             ) : (
                 <motion.div
-                    className="plant-grid"
+                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
                     variants={stagger}
                     initial="hidden"
                     animate="visible"
-                    style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '24px' }}
                 >
                     {plants.length === 0 ? (
-                        <motion.div variants={fadeInUp} style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px', background: 'rgba(255,255,255,0.02)', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                            <BiLeaf size={48} color="#444" style={{ marginBottom: '16px' }} />
-                            <h3 style={{ color: '#888' }}>Henüz Kayıtlı Bitki Yok</h3>
-                            <p style={{ color: '#666' }}>Yeni bitki ekleyerek başlayın.</p>
+                        <motion.div variants={fadeInUp} className="col-span-full py-16 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100 shadow-sm">
+                                <BiLeaf size={32} className="text-slate-400" />
+                            </div>
+                            <h3 className="text-slate-900 font-semibold text-lg mb-1">Henüz Kayıtlı Bitki Yok</h3>
+                            <p className="text-slate-500">Listeniz boş. Yeni bir bitki ekleyerek başlayın.</p>
                         </motion.div>
                     ) : (
                         plants.map((plant) => (
                             <motion.div
                                 key={plant.id}
-                                className="glass-panel"
+                                className="card-clean p-6 flex flex-col justify-between"
                                 variants={fadeInUp}
-                                style={{ padding: '24px', borderRadius: '20px' }}
-                                whileHover={{ y: -5, boxShadow: 'var(--shadow-lg)' }}
                             >
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '20px' }}>
-                                    <div style={{
-                                        width: '48px', height: '48px',
-                                        background: 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-                                        borderRadius: '12px',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        boxShadow: 'var(--shadow-glow-primary)',
-                                        color: 'black'
-                                    }}>
-                                        <BiLeaf size={24} />
+                                <div>
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shadow-sm">
+                                            <BiLeaf size={24} />
+                                        </div>
+                                        <div className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold uppercase tracking-wider">
+                                            {plant.type}
+                                        </div>
                                     </div>
-                                    <div style={{
-                                        padding: '6px 12px',
-                                        background: '#222',
-                                        borderRadius: '20px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: 600,
-                                        color: '#aaa',
-                                        border: '1px solid #333'
-                                    }}>
-                                        {plant.type.toUpperCase()}
-                                    </div>
+
+                                    <h3 className="text-xl font-bold text-slate-900 mb-1">{plant.name}</h3>
+                                    <p className="text-sm text-slate-500 mb-6 flex items-center gap-1">
+                                        <BiInfoCircle /> Kayıt: {new Date(plant.created_at).toLocaleDateString('tr-TR')}
+                                    </p>
                                 </div>
 
-                                <h3 style={{ fontSize: '1.25rem', marginBottom: '8px', color: 'white' }}>{plant.name}</h3>
-                                <p style={{ fontSize: '0.875rem', color: '#666', marginBottom: '24px' }}>
-                                    Kayıt: {new Date(plant.created_at).toLocaleDateString('tr-TR')}
-                                </p>
-
-                                <div style={{ display: 'flex', gap: '12px', borderTop: '1px solid #333', paddingTop: '20px' }}>
-                                    <button className="btn btn-secondary" style={{ flex: 1, padding: '10px', fontSize: '0.875rem' }}>
+                                <div className="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100 mt-auto">
+                                    <button className="btn btn-secondary py-2 text-xs">
                                         <BiTrendingUp /> Geçmiş
                                     </button>
-                                    <button className="btn btn-primary" style={{ flex: 1, padding: '10px', fontSize: '0.875rem' }}>
+                                    <button className="btn btn-primary py-2 text-xs bg-emerald-600/10 text-emerald-700 hover:bg-emerald-600 hover:text-white border-0 shadow-none">
                                         <BiBarChart /> Analiz
                                     </button>
                                 </div>

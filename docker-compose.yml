@@ -13,33 +13,33 @@ services:
       - ./models:/app/models
       - ./data:/app/data
     environment:
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - OLLAMA_HOST=http://host.docker.internal:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
       - OLLAMA_EMBED_MODEL=${OLLAMA_EMBED_MODEL:-nomic-embed-text}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - YOLO_MODEL_PATH=/app/models/yolov8_tomato.pt
+      - YOLO_MODEL_PATH=/app/models/tomato_disease_yolov8.pt
     depends_on:
       - qdrant
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
 
   # ===================
-  # Frontend (Next.js)
+  # Frontend (Vite React)
   # ===================
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3005:5173"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NODE_ENV=development
     depends_on:
       - backend
 

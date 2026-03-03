@@ -88,22 +88,24 @@ def get_qdrant_client(settings) -> Optional[QdrantClient]:
             _qdrant_client = QdrantClient(
                 host=settings.qdrant_host,
                 port=settings.qdrant_port,
-                timeout=5.0
+                timeout=10.0
             )
             # Test connection
-            _qdrant_client.get_collections()
+            collections = _qdrant_client.get_collections()
             _qdrant_available = True
             logger.info("Qdrant connection established")
             
-            # Ensure collection exists
-            try:
-                _qdrant_client.get_collection(settings.qdrant_collection)
-            except Exception:
+            # Ensure collection exists — check by listing, not by get
+            existing = [c.name for c in collections.collections]
+            if settings.qdrant_collection not in existing:
                 logger.info(f"Creating collection: {settings.qdrant_collection}")
                 _qdrant_client.create_collection(
                     collection_name=settings.qdrant_collection,
                     vectors_config=VectorParams(size=768, distance=Distance.COSINE)
                 )
+            else:
+                logger.info(f"Collection '{settings.qdrant_collection}' already exists, using it")
+                
         except Exception as e:
             logger.warning(f"Qdrant not available: {e}. Using fallback knowledge.")
             _qdrant_available = False
@@ -232,30 +234,36 @@ async def generate_answer(
     custom_system_prompt: str = None
 ) -> str:
     """
-    Generate an answer using Ollama LLM.
+    Generate an answer using Ollama LLM with optimized parameters.
     """
     from ..config import get_settings
     
     if settings is None:
         settings = get_settings()
     
-    # Build context string
+    # Build context string (expanded window)
     context_parts = []
     for i, doc in enumerate(context[:5], 1):
-        content = doc.get("content", "")[:800]
+        content = doc.get("content", "")[:1200]
         title = doc.get("title", f"Kaynak {i}")
         context_parts.append(f"[{title}]:\n{content}")
     
     context_str = "\n\n".join(context_parts) if context_parts else "Bilgi tabanında özel bir kaynak bulunamadı, genel bilgi kullanılıyor."
     
-    # Use custom system prompt if provided
-    system_prompt = custom_system_prompt or """Sen tarım alanında uzman bir yapay zeka asistanısın. 
-Çiftçilere bitki hastalıkları, zararlılar, gübreleme ve tarım uygulamaları konusunda yardımcı oluyorsun.
-Verilen bağlam bilgilerini kullanarak doğru ve pratik öneriler sun.
-Yanıtlarını Türkçe ver ve öz tut.
-Emin olmadığın konularda bir uzmana danışmayı öner."""
+    # Enhanced system prompt with strict formatting rules
+    system_prompt = custom_system_prompt or """Sen Türkiye'nin önde gelen Ziraat Fakültesi'nden mezun, 15 yıllık deneyime sahip uzman bir Ziraat Mühendisisin.
+Uzmanlık alanların: Topraksız tarım (hidroponik/aeroponik), bitki patolojisi, entegre zararlı yönetimi ve hassas tarım teknolojileri.
 
-    # Use custom user prompt if provided, otherwise default format
+KESİN KURALLAR:
+1. SADECE Türkçe yanıt ver. Asla İngilizce kelime kullanma.
+2. Markdown formatı kullan: başlıklar (#, ##), kalın (**), listeler (-, 1.)
+3. Asla JSON bloğu içine alma.
+4. Asla 'İşte raporunuz' veya 'Tabii ki' gibi giriş cümleleri kurma. Direkt başlıkla başla.
+5. Bilimsel terimler kullanırken parantez içinde Türkçe açıklama ekle.
+6. Her önerini somut dozaj, süre ve uygulama detayı ile destekle.
+7. Emin olmadığın konularda açıkça belirt ve uzman görüşü öner."""
+
+    # Build user prompt
     if custom_user_prompt:
         user_prompt = f"{custom_user_prompt}\n\nREFERANS BAĞLAM:\n{context_str}"
     else:
@@ -264,26 +272,37 @@ Emin olmadığın konularda bir uzmana danışmayı öner."""
 
 Soru: {query}
 
-Lütfen yukarıdaki bağlamı kullanarak kısa ve pratik bir yanıt ver."""
+Lütfen yukarıdaki bağlamı kullanarak kapsamlı ve pratik bir Türkçe yanıt ver. Markdown formatında yaz."""
 
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 f"{settings.ollama_host}/api/generate",
                 json={
                     "model": settings.ollama_model,
                     "prompt": user_prompt,
                     "system": system_prompt,
-                    "stream": False
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.3,
+                        "top_p": 0.9,
+                        "num_predict": 2048,
+                    }
                 }
             )
             response.raise_for_status()
             data = response.json()
-            return data.get("response", "Yanıt oluşturulamadı.")
+            raw = data.get("response", "Yanıt oluşturulamadı.")
+            # Clean common LLM artifacts
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.strip("`").strip()
+                if cleaned.lower().startswith("markdown"):
+                    cleaned = cleaned[8:].strip()
+            return cleaned
             
     except Exception as e:
         logger.error(f"LLM generation failed: {e}")
-        # Return context directly as fallback
         if context:
             return context[0].get("content", "Yanıt oluşturulamadı.")
         return "Yanıt oluşturulurken bir hata oluştu. Lütfen daha sonra tekrar deneyin."

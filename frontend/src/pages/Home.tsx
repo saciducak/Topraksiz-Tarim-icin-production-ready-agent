@@ -1,19 +1,27 @@
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useDropzone } from 'react-dropzone';
 import ReactMarkdown from 'react-markdown';
-import { motion, AnimatePresence } from 'framer-motion';
-import { BiScan, BiCheckShield, BiError, BiInfoCircle, BiUpload, BiRefresh } from 'react-icons/bi';
+import {
+    BiScan, BiUpload, BiLeaf, BiRefresh, BiBrain, BiError,
+    BiBarChart, BiCheckCircle, BiTimeFive, BiShieldQuarter,
+    BiTargetLock, BiBookContent, BiPulse, BiCog
+} from 'react-icons/bi';
 import SensorPanel from '../components/SensorPanel';
+import { cn } from '../lib/utils';
 
+// ── Interfaces ──
 interface Detection {
     class_name: string;
+    display_name?: string;
     confidence: number;
     bbox: number[];
+    source?: string;
 }
 
 interface Recommendation {
     action: string;
     priority: string;
+    category?: string;
     details: string;
     timeframe?: string;
 }
@@ -35,39 +43,117 @@ interface AnalysisResult {
     summary: string;
 }
 
-// Animation Variants
-const fadeInUp = {
-    hidden: { opacity: 0, y: 40, filter: 'blur(10px)' },
-    visible: {
-        opacity: 1,
-        y: 0,
-        filter: 'blur(0px)',
-        transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] }
-    }
+// ── Disease name mapping (frontend fallback) ──
+const DISEASE_TR: Record<string, string> = {
+    early_blight_suspected: 'Erken Yanıklık (Şüpheli)',
+    early_blight: 'Erken Yanıklık',
+    late_blight: 'Geç Yanıklık',
+    chlorosis_suspected: 'Kloroz / Sararma',
+    necrosis_suspected: 'Nekroz / Doku Ölümü',
+    leaf_spot: 'Yaprak Lekesi',
+    leaf_mold: 'Yaprak Küfü',
+    septoria_leaf_spot: 'Septoria Yaprak Lekesi',
+    spider_mites: 'Kırmızı Örümcek',
+    target_spot: 'Hedef Leke',
+    mosaic_virus: 'Mozaik Virüsü',
+    yellow_leaf_curl_virus: 'Sarı Yaprak Kıvrılma Virüsü',
+    bacterial_spot: 'Bakteriyel Leke',
+    healthy: 'Sağlıklı',
 };
+function getDisplayName(det: Detection): string {
+    if (det.display_name) return det.display_name;
+    const key = det.class_name.toLowerCase();
+    if (DISEASE_TR[key]) return DISEASE_TR[key];
+    return det.class_name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
 
-const stagger = {
-    visible: {
-        transition: { staggerChildren: 0.1 }
-    }
-};
+// ── Circular Score Ring ──
+function ScoreRing({ score }: { score: number }) {
+    const radius = 52;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (score / 100) * circumference;
 
+    const color = score >= 90 ? '#059669' : score >= 70 ? '#d97706' : '#dc2626';
+    const label = score >= 90 ? 'Sağlıklı' : score >= 70 ? 'Hafif Risk' : 'Kritik';
+    const labelColor = score >= 90 ? 'text-emerald-600' : score >= 70 ? 'text-amber-600' : 'text-red-600';
+    const bgGlow = score >= 90 ? 'bg-emerald-50/80' : score >= 70 ? 'bg-amber-50/80' : 'bg-red-50/80';
+
+    return (
+        <div className={cn("p-6 rounded-2xl border border-slate-100 text-center card-premium", bgGlow)}>
+            <div className="score-ring mb-3">
+                <svg width="128" height="128" viewBox="0 0 128 128">
+                    <circle className="score-circle-bg" cx="64" cy="64" r={radius} strokeWidth="10" />
+                    <circle
+                        className="score-circle-fill"
+                        cx="64" cy="64" r={radius}
+                        strokeWidth="10"
+                        stroke={color}
+                        strokeDasharray={circumference}
+                        strokeDashoffset={offset}
+                    />
+                </svg>
+                <div className="score-value">
+                    <span className="text-4xl font-black" style={{ color }}>{score}</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">SKOR</span>
+                </div>
+            </div>
+            <div className={cn("text-sm font-extrabold uppercase tracking-wider", labelColor)}>{label}</div>
+            <div className="text-[10px] text-slate-400 mt-1">YOLOv8 + Renk Analizi</div>
+        </div>
+    );
+}
+
+// ── Confidence Bar ──
+function ConfidenceBar({ confidence }: { confidence: number }) {
+    const pct = Math.round(confidence * 100);
+    const color = pct >= 80 ? 'bg-red-500' : pct >= 50 ? 'bg-amber-500' : 'bg-emerald-500';
+    return (
+        <div className="confidence-bar mt-2">
+            <div className={cn("fill", color)} style={{ width: `${pct}%` }} />
+        </div>
+    );
+}
+
+// ── Priority Badge ──
+function PriorityBadge({ priority }: { priority: string }) {
+    const p = priority.toLowerCase();
+    const cls = p === 'high' ? 'badge-danger' : p === 'medium' ? 'badge-warning' : 'badge-success';
+    const label = p === 'high' ? 'Yüksek' : p === 'medium' ? 'Orta' : 'Düşük';
+    return <span className={cn("badge-saas", cls)}>{label}</span>;
+}
+
+// ── Category Badge ──
+function CategoryBadge({ category }: { category?: string }) {
+    if (!category) return null;
+    const c = category.toLowerCase();
+    const cls = `badge-category-${c}`;
+    const labels: Record<string, string> = {
+        kimyasal: '💊 Kimyasal',
+        organik: '🌿 Organik',
+        'kültürel': '🌱 Kültürel',
+        genel: '📋 Genel',
+        sistem: '⚙️ Sistem',
+    };
+    return <span className={cn("badge-saas text-[10px]", cls)}>{labels[c] || category}</span>;
+}
+
+// ── Severity ──
+function getSeverity(confidence: number): 'high' | 'medium' | 'low' {
+    if (confidence >= 0.8) return 'high';
+    if (confidence >= 0.5) return 'medium';
+    return 'low';
+}
+
+// ══════════════════════════════════════
+// ── MAIN COMPONENT ──
+// ══════════════════════════════════════
 export default function Home() {
     const [selectedImage, setSelectedImage] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [result, setResult] = useState<AnalysisResult | null>(null);
     const [error, setError] = useState<string | null>(null);
-
-    const [sensorData, setSensorData] = useState({
-        ph: '6.5',
-        ec: '2.0',
-        temperature: '22'
-    });
-
-    const updateSensorData = (key: keyof typeof sensorData, value: string) => {
-        setSensorData(prev => ({ ...prev, [key]: value }));
-    };
+    const [sensorData, setSensorData] = useState({ ph: '6.5', ec: '2.0', temperature: '22' });
 
     const onDrop = useCallback((acceptedFiles: File[]) => {
         const file = acceptedFiles[0];
@@ -80,258 +166,330 @@ export default function Home() {
     }, []);
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
-        onDrop,
-        accept: { 'image/*': [] },
-        multiple: false
+        onDrop, accept: { 'image/*': [] }, multiple: false
     });
 
-    const removeImage = (e?: React.MouseEvent) => {
-        e?.stopPropagation();
+    const resetAnalysis = () => {
         setSelectedImage(null);
         setPreviewUrl(null);
         setResult(null);
+        setError(null);
     };
 
     const analyzeImage = async () => {
         if (!selectedImage) return;
         setIsAnalyzing(true);
         setError(null);
-
         try {
             const formData = new FormData();
             formData.append('file', selectedImage);
             formData.append('sensor_data', JSON.stringify(sensorData));
-
-            const response = await fetch('/api/v1/analyze', {
-                method: 'POST',
-                body: formData,
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`Analiz hatası: ${errorText || response.statusText}`);
-            }
-
+            const response = await fetch('/api/v1/analyze', { method: 'POST', body: formData });
+            if (!response.ok) throw new Error(await response.text());
             const data = await response.json();
             setResult(data);
         } catch (err) {
-            console.error(err);
             setError(err instanceof Error ? err.message : 'Bir hata oluştu');
         } finally {
             setIsAnalyzing(false);
         }
     };
 
-    const calculateHealthScore = (r: AnalysisResult) => {
-        if (!r.vision?.has_disease) return 98;
-        const detectionCount = r.vision.detections.length;
-        return Math.max(10, 100 - (detectionCount * 20));
-    };
-
-    const getScoreColor = (score: number) => {
-        if (score >= 90) return 'excellent';
-        if (score >= 70) return 'good';
-        if (score >= 30) return 'risk';
-        return 'critical';
-    };
+    const healthScore = useMemo(() => {
+        if (!result) return 100;
+        if (!result.vision?.has_disease) return 96;
+        const dets = result.vision?.detections || [];
+        const avgConf = dets.reduce((s, d) => s + d.confidence, 0) / (dets.length || 1);
+        return Math.max(8, Math.round(100 - (dets.length * 15) - (avgConf * 30)));
+    }, [result]);
 
     return (
-        <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={stagger}
-            className="home-page"
-        >
-            <section className="hero">
-                <div className="container" style={{ position: 'relative', zIndex: 1 }}>
-                    <motion.div variants={fadeInUp} style={{ display: 'flex', justifyContent: 'center' }}>
-                        <div className="hero-badge">
-                            YENİ NESİL ZİRAİ ZEKA
-                        </div>
-                    </motion.div>
+        <main className="min-h-screen pt-24 pb-20 bg-slate-50 bg-pattern">
+            <div className="w-full max-w-6xl mx-auto px-6">
 
-                    <motion.h1 variants={fadeInUp}>
-                        Doğanın Dili, <br />
-                        <span className="highlight">Verinin Gücüyle Buluştu</span>
-                    </motion.h1>
+                {/* ── HERO ── */}
+                <section className="text-center mb-16 animate-fade-in">
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-6 rounded-full bg-white border border-slate-200 shadow-sm text-xs font-bold text-slate-600 uppercase tracking-widest">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        AI-Powered Plant Diagnostics v2.2
+                    </div>
+                    <h1 className="text-4xl md:text-6xl font-extrabold text-slate-900 mb-6 tracking-tight">
+                        Tarımsal Zekanın <br className="hidden md:block" />
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-600 via-teal-500 to-cyan-500">Bilimsel Standartı.</span>
+                    </h1>
+                    <p className="text-lg text-slate-500 max-w-2xl mx-auto leading-relaxed">
+                        YOLOv8 görüntü işleme, LangGraph ajan mimarisi ve RAG bilgi tabanı ile
+                        işletmeniz için <span className="font-semibold text-slate-700">kesin teşhis raporları</span> oluşturun.
+                    </p>
+                </section>
 
-                    <motion.p variants={fadeInUp} className="hero-text">
-                        YOLOv8 Görüntü İşleme Ajanları ve Vektör Tabanlı Zeka, bitkilerinizi anlamak için birleşti.
-                        Sadece teşhis koymuyoruz; binlerce akademik kaynağı ve anlık sensör verilerini işleyerek
-                        <span style={{ color: '#fff', fontWeight: 500 }}> nokta atışı reçeteler</span> sunuyoruz.
-                    </motion.p>
-                </div>
-            </section>
+                {/* ── WORKSPACE ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
-            <section id="upload" className="container" style={{ maxWidth: '800px', margin: '0 auto', paddingBottom: '100px' }}>
-                <motion.div variants={fadeInUp} className="upload-card glass-panel">
-
-                    {!previewUrl ? (
-                        <div
-                            {...getRootProps()}
-                            className={`dropzone ${isDragActive ? 'active' : ''}`}
-                        >
-                            <input {...getInputProps()} />
-                            <div className="dropzone-icon">
-                                <BiUpload />
-                            </div>
-                            <h3>Görseli Buraya Sürükleyin</h3>
-                            <p>veya dosya seçmek için tıklayın</p>
-                            <div className="formats">
-                                <span className="format-tag">JPG</span>
-                                <span className="format-tag">PNG</span>
-                                <span className="format-tag">WEBP</span>
-                            </div>
-                        </div>
-                    ) : (
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            style={{ position: 'relative', borderRadius: '16px', overflow: 'hidden' }}
-                        >
-                            <img src={previewUrl} alt="Preview" style={{ width: '100%', display: 'block' }} />
-                            <button
-                                onClick={removeImage}
-                                style={{
-                                    position: 'absolute', top: '20px', right: '20px',
-                                    background: 'rgba(0,0,0,0.7)', color: 'white',
-                                    border: 'none', width: '40px', height: '40px',
-                                    borderRadius: '50%', cursor: 'pointer', fontSize: '20px',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                }}
-                            >
-                                ×
-                            </button>
-                        </motion.div>
-                    )}
-
-                    <motion.div variants={fadeInUp} style={{ marginTop: '30px' }}>
-                        <SensorPanel data={sensorData} onChange={updateSensorData} />
-                    </motion.div>
-
-                    {selectedImage && !isAnalyzing && !result && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            style={{ textAlign: 'center', marginTop: '30px' }}
-                        >
-                            <button className="btn btn-primary" onClick={analyzeImage} style={{ padding: '16px 48px', fontSize: '1.1rem' }}>
-                                <BiScan size={24} /> Analizi Başlat
-                            </button>
-                        </motion.div>
-                    )}
-
-                    {isAnalyzing && (
-                        <div className="loading-container">
-                            <div className="spinner"></div>
-                            <p style={{ marginTop: '20px', color: '#888' }}>
-                                AI analiz yapıyor, lütfen bekleyin...
-                            </p>
-                        </div>
-                    )}
-
-                    {error && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            style={{ marginTop: '20px', padding: '20px', background: 'rgba(255, 68, 68, 0.1)', color: '#ff4444', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}
-                        >
-                            <BiError size={24} /> {error}
-                        </motion.div>
-                    )}
-                </motion.div>
-
-            </section>
-
-            {/* RESULTS SECTION (Wide) */}
-            <section id="results" className="container" style={{ paddingBottom: '100px' }}>
-                <AnimatePresence>
-                    {result && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 50 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                            style={{ marginTop: '60px' }}
-                        >
-                            <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-                                <h2 style={{ fontSize: '2.5rem', marginBottom: '8px' }}>Bitki Sağlık Raporu</h2>
-                                <p style={{ color: '#666' }}>Analiz ID: {result.id}</p>
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px' }}>
-
-                                {/* Left Column: Vision & Score */}
-                                <motion.div
-                                    className="glass-panel"
-                                    style={{ padding: '32px', borderRadius: '24px', height: 'fit-content' }}
-                                    whileHover={{ y: -5 }}
+                    {/* ── LEFT: Upload ── */}
+                    <div className={cn("transition-all duration-500", result ? "lg:col-span-4" : "lg:col-span-12")}>
+                        <div className={cn("card-saas p-1", result ? "" : "max-w-3xl mx-auto")}>
+                            {!previewUrl ? (
+                                <div
+                                    {...getRootProps()}
+                                    className={cn(
+                                        "border-2 border-dashed border-slate-200 rounded-xl p-12 text-center cursor-pointer upload-glow bg-white/50",
+                                        isDragActive ? "border-emerald-500 bg-emerald-50/50" : ""
+                                    )}
                                 >
-                                    <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-                                        <div className={`score-circle ${getScoreColor(calculateHealthScore(result))}`}>
-                                            {Math.round(calculateHealthScore(result))}
-                                        </div>
-                                        <div style={{ fontSize: '0.9rem', color: '#888', fontWeight: 600, letterSpacing: '0.05em' }}>GENEL SAĞLIK PUANI</div>
+                                    <input {...getInputProps()} />
+                                    <div className="w-16 h-16 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mx-auto mb-5">
+                                        <BiUpload className="text-3xl text-emerald-600" />
                                     </div>
+                                    <h3 className="text-lg font-bold text-slate-900 mb-2">Görseli Buraya Bırakın</h3>
+                                    <p className="text-slate-500 text-sm">veya dosya seçmek için tıklayın</p>
+                                    <p className="text-slate-400 text-xs mt-2">JPG, PNG, WebP — Maks. 10MB</p>
+                                </div>
+                            ) : (
+                                <div className="relative group rounded-xl overflow-hidden bg-slate-900">
+                                    <img src={previewUrl} alt="Preview" className="w-full h-64 object-cover opacity-90" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
+                                        <button onClick={resetAnalysis} className="btn-saas btn-secondary text-xs backdrop-blur-sm bg-white/80">
+                                            Görseli Değiştir
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
-                                    <h4 style={{ marginBottom: '16px', borderBottom: '1px solid #333', paddingBottom: '12px' }}>GÖRSEL TESPİTLER</h4>
-                                    {result.vision?.detections.map((det, idx) => (
-                                        <div key={idx} className="detection-tag">
-                                            <span>{det.class_name}</span>
-                                            <span style={{ color: 'var(--primary)' }}>%{Math.round(det.confidence * 100)}</span>
+                            <div className="p-6">
+                                <SensorPanel data={sensorData} onChange={(k, v) => setSensorData({ ...sensorData, [k]: v })} />
+
+                                {selectedImage && !isAnalyzing && !result && (
+                                    <button onClick={analyzeImage} className="btn-saas btn-primary w-full mt-6 py-3.5 text-base shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30">
+                                        <BiScan className="text-lg" /> Analiz Raporunu Oluştur
+                                    </button>
+                                )}
+
+                                {isAnalyzing && (
+                                    <div className="mt-6 p-5 bg-gradient-to-r from-slate-50 to-white border border-slate-100 rounded-xl">
+                                        <div className="flex items-center gap-4 mb-3">
+                                            <div className="w-6 h-6 border-2 border-slate-200 border-t-emerald-600 rounded-full animate-spin"></div>
+                                            <h4 className="font-bold text-slate-900 text-sm">AI Pipeline Çalışıyor...</h4>
+                                        </div>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {['Vision (YOLO)', 'RAG Arama', 'Karar Motoru'].map((step, i) => (
+                                                <span key={i} className="badge-saas badge-neutral text-[10px] animate-pulse" style={{ animationDelay: `${i * 0.3}s` }}>
+                                                    <BiCog className="mr-1 animate-spin" style={{ animationDuration: '2s' }} /> {step}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {error && (
+                                    <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-600">
+                                        <BiError className="mt-0.5 text-lg flex-shrink-0" />
+                                        <p className="text-sm font-medium">{error}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── RIGHT: Results ── */}
+                    {result && (
+                        <div className="lg:col-span-8 space-y-6">
+
+                            {/* ═══ Report Header ═══ */}
+                            <div className="card-gradient-border animate-fade-in">
+                                <div className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 p-5 flex justify-between items-center rounded-t-2xl">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 rounded-xl shadow-sm">
+                                            <BiBarChart className="text-emerald-600" size={20} />
+                                        </div>
+                                        <div>
+                                            <h2 className="font-extrabold text-slate-900 text-lg tracking-tight">Analiz Raporu</h2>
+                                            <p className="text-xs text-slate-500 font-mono uppercase tracking-wide">
+                                                {result.id.slice(0, 8)} · {new Date().toLocaleDateString('tr-TR')}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button onClick={resetAnalysis} className="btn-saas btn-secondary text-xs">
+                                        <BiRefresh size={16} /> Yeni Analiz
+                                    </button>
+                                </div>
+
+                                <div className="p-6 bg-white rounded-b-2xl">
+                                    {/* Score + Summary */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                                        <div className="md:col-span-1">
+                                            <ScoreRing score={healthScore} />
+                                        </div>
+                                        <div className="md:col-span-2 flex flex-col justify-center">
+                                            <h3 className="font-extrabold text-slate-900 mb-3 flex items-center gap-2 text-lg">
+                                                <BiBrain className="text-slate-400" />
+                                                Teşhis Özeti
+                                            </h3>
+                                            <p className="text-slate-600 text-sm leading-relaxed mb-4">
+                                                {result.vision?.summary || result.summary}
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {result.vision?.detections.map((det, i) => {
+                                                    const sev = getSeverity(det.confidence);
+                                                    const badgeCls = sev === 'high' ? 'badge-danger' : sev === 'medium' ? 'badge-warning' : 'badge-success';
+                                                    return (
+                                                        <div key={i} className={cn("badge-saas py-1 px-3", badgeCls)}>
+                                                            {getDisplayName(det)}
+                                                            <span className="ml-2 opacity-70">%{(det.confidence * 100).toFixed(0)}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {(!result.vision?.detections.length) && (
+                                                    <span className="badge-saas badge-success py-1 px-3">
+                                                        <BiLeaf className="mr-1" /> Sağlıklı Bitki
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* ═══ Disease Cards ═══ */}
+                            {result.vision?.detections && result.vision.detections.length > 0 && (
+                                <div className="animate-fade-in-delay">
+                                    <h3 className="font-extrabold text-slate-900 mb-4 flex items-center gap-2 text-base px-1">
+                                        <BiTargetLock className="text-red-500" />
+                                        Tespit Edilen Durumlar
+                                        <span className="badge-saas badge-neutral ml-1">{result.vision.detections.length}</span>
+                                    </h3>
+                                    <div className="space-y-3">
+                                        {result.vision.detections.map((det, i) => {
+                                            const sev = getSeverity(det.confidence);
+                                            const pct = Math.round(det.confidence * 100);
+                                            return (
+                                                <div key={i} className={cn("card-disease card-premium", `severity-${sev}`)}>
+                                                    <div className="flex items-start justify-between mb-2">
+                                                        <div>
+                                                            <h4 className="font-bold text-slate-900 text-base">
+                                                                {getDisplayName(det)}
+                                                            </h4>
+                                                            <div className="flex gap-2 mt-1">
+                                                                <span className="text-[10px] text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded-full">
+                                                                    {det.source === 'yolo' ? '🎯 YOLO Model' : det.source === 'color_analysis' ? '🎨 Renk Analizi' : '🤖 AI'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className={cn(
+                                                                "text-2xl font-black",
+                                                                sev === 'high' ? 'text-red-600' : sev === 'medium' ? 'text-amber-600' : 'text-emerald-600'
+                                                            )}>
+                                                                %{pct}
+                                                            </span>
+                                                            <div className="text-[10px] text-slate-400 uppercase tracking-wider">Güven</div>
+                                                        </div>
+                                                    </div>
+                                                    <ConfidenceBar confidence={det.confidence} />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ═══ RAG Academic Analysis ═══ */}
+                            {result.rag && (
+                                <div className="card-saas overflow-hidden animate-fade-in-delay card-premium">
+                                    <div className="bg-gradient-to-r from-emerald-50/60 to-white border-b border-slate-100 p-4 flex items-center gap-3">
+                                        <div className="p-2 bg-gradient-to-br from-emerald-100 to-teal-100 text-emerald-700 rounded-xl">
+                                            <BiBookContent size={20} />
+                                        </div>
+                                        <div>
+                                            <h3 className="font-extrabold text-slate-900">Akademik Analiz & Bulgular</h3>
+                                            <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Ollama LLM + RAG Bilgi Tabanı</p>
+                                        </div>
+                                    </div>
+                                    <div className="p-6 analysis-prose">
+                                        <ReactMarkdown>{result.rag.answer}</ReactMarkdown>
+                                    </div>
+                                    {result.rag.sources && result.rag.sources.length > 0 && (
+                                        <div className="border-t border-slate-100 px-6 py-3 bg-slate-50/50">
+                                            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-bold mb-1.5">Kaynaklar</p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {result.rag.sources.map((src: any, i: number) => (
+                                                    <span key={i} className="badge-saas badge-neutral text-[10px]">
+                                                        📄 {src.title || `Kaynak ${i + 1}`}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ═══ Treatment Protocol ═══ */}
+                            {result.recommendations.length > 0 && (
+                                <div className="animate-fade-in-delay">
+                                    <h3 className="font-extrabold text-slate-900 mb-4 flex items-center gap-2 text-base px-1">
+                                        <BiShieldQuarter className="text-emerald-600" />
+                                        Tedavi Protokolü & Aksiyon Planı
+                                    </h3>
+                                    <div className="space-y-3">
+                                        {result.recommendations.map((rec, i) => (
+                                            <div key={i} className="card-action card-premium">
+                                                <div className="min-w-[44px] h-[44px] rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 flex items-center justify-center font-black text-emerald-700 text-sm shadow-sm">
+                                                    {i + 1}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex flex-wrap items-start gap-2 mb-2">
+                                                        <h4 className="font-bold text-slate-900 flex-1">{rec.action}</h4>
+                                                        <div className="flex gap-1.5 flex-shrink-0">
+                                                            <CategoryBadge category={rec.category} />
+                                                            <PriorityBadge priority={rec.priority} />
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-slate-600 text-sm leading-relaxed mb-3">{rec.details}</p>
+                                                    {rec.timeframe && (
+                                                        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold bg-slate-50 rounded-lg px-3 py-1.5 w-fit">
+                                                            <BiTimeFive className="text-slate-400" />
+                                                            <span>{rec.timeframe}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ═══ Sensor Correlation ═══ */}
+                            <div className="card-saas p-5 animate-fade-in-delay card-premium">
+                                <h3 className="font-extrabold text-slate-900 mb-4 flex items-center gap-2 text-sm">
+                                    <BiPulse className="text-sky-500" />
+                                    Sensör Korelasyonu
+                                </h3>
+                                <div className="grid grid-cols-3 gap-4">
+                                    {[
+                                        { label: 'pH', value: sensorData.ph, unit: '', optimal: '5.5 - 7.0', isWarning: parseFloat(sensorData.ph) > 7.5 || parseFloat(sensorData.ph) < 5.5 },
+                                        { label: 'EC', value: sensorData.ec, unit: 'mS/cm', optimal: '1.0 - 2.5', isWarning: parseFloat(sensorData.ec) > 2.5 },
+                                        { label: 'Sıcaklık', value: sensorData.temperature, unit: '°C', optimal: '18 - 28', isWarning: parseFloat(sensorData.temperature) > 32 || parseFloat(sensorData.temperature) < 15 }
+                                    ].map((s, i) => (
+                                        <div key={i} className={cn(
+                                            "rounded-xl border p-4 text-center card-premium",
+                                            s.isWarning ? "border-red-200 bg-red-50/50" : "border-slate-100 bg-white"
+                                        )}>
+                                            <div className={cn("text-2xl font-black", s.isWarning ? "text-red-600" : "text-slate-900")}>
+                                                {s.value}<span className="text-xs font-medium text-slate-400 ml-0.5">{s.unit}</span>
+                                            </div>
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">{s.label}</div>
+                                            <div className={cn("text-[9px] mt-1 font-semibold", s.isWarning ? "text-red-500" : "text-slate-400")}>
+                                                {s.isWarning ? '⚠️ ' : ''}Optimal: {s.optimal}
+                                            </div>
                                         </div>
                                     ))}
-                                    {(!result.vision?.detections || result.vision.detections.length === 0) && (
-                                        <p style={{ color: '#666', fontStyle: 'italic' }}>Hastalık belirtisi tespit edilmedi.</p>
-                                    )}
-
-                                    {result.recommendations.length > 0 && (
-                                        <div style={{ marginTop: '30px', padding: '20px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                            <h5 style={{ margin: '0 0 10px 0', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <BiCheckShield /> ÖNERİLEN AKSİYON
-                                            </h5>
-                                            <p style={{ fontSize: '0.9rem', color: '#ccc', lineHeight: '1.5' }}>{result.recommendations[0].action}</p>
-                                        </div>
-                                    )}
-                                </motion.div>
-
-                                {/* Right Column: RAG & Detail */}
-                                <motion.div
-                                    className="glass-panel"
-                                    style={{ padding: '40px', borderRadius: '24px' }}
-                                    whileHover={{ y: -5 }}
-                                >
-                                    <div style={{ marginBottom: '28px', borderBottom: '1px solid var(--surface-glass-border)', paddingBottom: '20px' }}>
-                                        <h3 style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.5rem', fontWeight: 700 }}>
-                                            <BiInfoCircle color="var(--accent)" /> Detaylı AI Analizi
-                                        </h3>
-                                    </div>
-                                    {result.rag && (
-                                        <div className="markdown-body">
-                                            <ReactMarkdown>{result.rag.answer}</ReactMarkdown>
-                                        </div>
-                                    )}
-
-                                    <div style={{ marginTop: '30px', paddingTop: '20px', borderTop: '1px solid var(--surface-glass-border)', fontSize: '0.8rem', color: '#666' }}>
-                                        Kaynak: Future Harvest AI Bilgi Bankası • Model: YOLOv8 + Llama 3
-                                    </div>
-                                </motion.div>
+                                </div>
                             </div>
 
-                            <div style={{ textAlign: 'center', marginTop: '80px' }}>
-                                <button
-                                    className="btn btn-secondary"
-                                    onClick={removeImage}
-                                    style={{ padding: '16px 48px', fontSize: '1rem' }}
-                                >
-                                    <BiRefresh /> Yeni Analiz Yap
-                                </button>
-                            </div>
-                        </motion.div>
+                        </div>
                     )}
-                </AnimatePresence>
-            </section>
-
-        </motion.div>
+                </div>
+            </div>
+        </main>
     );
 }

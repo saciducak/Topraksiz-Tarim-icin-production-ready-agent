@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     qdrant_collection: str = "agricultural_knowledge"
     
     # YOLO Settings
-    yolo_model_path: str = "./models/yolov8_tomato.pt"
+    yolo_model_path: str = "./models/tomato_disease_yolov8.pt"
     yolo_confidence_threshold: float = 0.5
     
     # Upload Settings
