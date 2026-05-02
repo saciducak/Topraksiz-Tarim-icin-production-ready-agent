@@ -1,78 +1,54 @@
-# AgroCortex AI Platform 🌾
+# AgroCortex 🌾: Multi-Agent Agricultural AI Pipeline
 
-**Akıllı, Sürdürülebilir ve Modern Tarım Teknolojisi**
+AgroCortex is a production-ready, edge-compatible AI orchestration system designed to diagnose plant diseases and generate dynamic, context-aware treatment plans. Built heavily around **LangGraph** for multi-agent workflows and **Local LLM Inference** to ensure data privacy and reduce token costs, it diverges from standard linear prompt chains to provide a robust, reasoning-based diagnostic pipeline.
 
-AgroCortex, topraksız tarım ve geleneksel yetiştiricilik için geliştirilmiş, üretim kalitesini artırmayı hedefleyen **production-ready** bir yapay zeka platformudur. Bitki hastalıklarını **YOLOv8** ve **HSV renk analizi** ile tespit eder, **LLM destekli** tedavi planları sunar ve koruyucu tarım stratejileri geliştirir.
+## 🧠 Core Engineering Architecture
 
-## ✨ Temel Özellikler
+### 1. Multi-Agent Orchestration (LangGraph)
+Instead of rigid `SequentialChains`, AgroCortex utilizes a directed acyclic graph (DAG) architecture via LangGraph to coordinate three distinct agents:
+- **Vision Agent**: Parses image bytes and extracts bounding boxes/confidence scores.
+- **RAG Agent**: Triggers an asynchronous vector search against Qdrant if specific disease flags are raised.
+- **Decision Agent**: Synthesizes computer vision outputs, IoT sensor telemetry (pH, temperature), and retrieved academic literature into a structured mitigation strategy.
 
-### 🛡️ Akıllı Teşhis & Güvenlik
-- **Plant Validation**: Yüklenen görselin gerçekten bir bitki olup olmadığını kontrol eden ön koruma katmanı.
-- **YOLOv8 Vision**: Özel eğitimli model ile domates hastalıklarını tespit (`tomato_disease_yolov8.pt`).
-- **HSV Renk Analizi**: YOLO'nun kaçırabileceği nüanslar için piksel tabanlı gelişmiş tarama (5 hastalık türü: Erken Yanıklık, Kloroz, Nekroz, Bakteriyel Leke, Külleme).
+### 2. Robust RAG Ingestion Pipeline
+The knowledge-base ingestion is optimized for semantic retrieval and minimal context loss:
+- **Semantic Chunking**: Employs `RecursiveCharacterTextSplitter` (chunk_size=1000, overlap=200) to respect paragraph and sentence boundaries, preventing critical treatment protocols from being severed across vectors.
+- **Multi-Format Parsing**: Built-in document loaders for extracting raw text from PDFs, DOCX, MD, and TXT files.
+- **Local Embedding**: Uses Ollama's `nomic-embed-text` to map chunks into 768-dimensional space, indexed in Qdrant using COSINE distance.
 
-### 📊 Kapsamlı Analiz
-- **Sağlık Puanı**: Tespitlere göre dinamik skor hesaplama (0-100).
-- **Akademik Rapor**: RAG tabanlı, Markdown formatında detaylı analiz.
-- **LLM-Powered Tedavi Planı**: Ollama LLM ile sensör verisi + teşhislere göre akıllı öneriler (kimyasal/organik/kültürel kategoriler).
+### 3. Vision System & Heuristic Fallback
+A dual-layer computer vision pipeline guarantees high recall:
+- **Primary Detection**: YOLOv8-based object detection tailored for specific blight and leaf spot classifications.
+- **Heuristic Fallback (HSV Space)**: In instances where the deep learning model confidence is low, the pipeline automatically falls back to deterministic HSV color space analysis (e.g., detecting chlorosis via yellow pixel ratios > 3%, or necrosis via dark patch density).
 
-### 🎨 Premium UI (AgroCortex)
-- **Glassmorphism Header**: Bulanık cam efekti + canlı sistem durumu göstergesi.
-- **Gradient Border Kartlar**: Emerald→Teal→Cyan gradient çerçeveler.
-- **Micro-Animations**: Score ring, hover lift, fade-in, pipeline step göstergeleri.
-- **Responsive**: Sahada tablet veya telefonla kullanım için mobil uyumlu.
+### 4. Frontend Performance & Testing
+- **Route-Based Code Splitting**: Implemented `React.lazy` and `Suspense` for aggressive chunking of the frontend bundle, drastically reducing the Time to Interactive (TTI).
+- **Test Coverage**: An extensive test suite (75+ tests) built on Vitest and React Testing Library (RTL). Configured with a `happy-dom` environment to resolve Node ESM compatibility issues seamlessly.
 
----
+## 🚀 Tech Stack
 
-## 🏗️ Mimari
+| Component | Technology | Rationale |
+|-----------|------------|-----------|
+| **Orchestration** | LangGraph, FastAPI | Async non-blocking endpoints with cyclic graph capabilities. |
+| **LLM Engine** | Ollama (llama3.2) | 4-bit quantized local inference; zero latency/cost for external API calls. |
+| **Vector DB** | Qdrant (Rust-based) | High-throughput HNSW indexing, minimal memory footprint. |
+| **Embeddings** | nomic-embed-text | Optimized for retrieval tasks, generating dense 768-d vectors locally. |
+| **Frontend** | Vite, React, Vitest | Fast HMR, strict type-checking, and comprehensive RTL integration. |
 
-```mermaid
-graph TD
-    A["🖥️ Vite React Frontend<br/>:3005"] -->|"/api/v1/*"| B["📡 FastAPI Backend<br/>:8000"]
-    B --> C{"🔄 LangGraph<br/>Multi-Agent Orkestrasyon"}
-    C -->|"Görüntü"| D["👁️ Vision Agent<br/>YOLOv8 + HSV Renk"]
-    C -->|"Sorgu"| F["📚 RAG Agent<br/>Qdrant + Ollama LLM"]
-    C -->|"Sentez"| I["⚖️ Decision Agent<br/>LLM-Powered Öneriler"]
-    D -->|"Tespitler"| I
-    F -->|"Akademik Rapor"| I
-    F -->|"Vektör Arama"| G["🗄️ Qdrant VectorDB<br/>:6333"]
-    F -->|"LLM"| H["🦙 Ollama<br/>llama3.2 + nomic-embed"]
-    I -->|"Rapor"| J["📋 Final Çıktı"]
-```
+## 🛠️ Quick Start
 
----
+### Prerequisites
+- Docker & Docker Compose
+- Ollama (`brew install ollama`)
 
-## 🛠️ Teknoloji Stack
-
-| Teknoloji | Versiyon | Rol |
-|-----------|---------|-----|
-| **FastAPI** | 0.109 | Backend REST API, async request handling |
-| **LangGraph** | latest | Multi-agent orkestrasyon, DAG tabanlı workflow |
-| **Ollama** | - | Yerel LLM inference (llama3.2 + nomic-embed-text) |
-| **Qdrant** | 1.7 | Vektör veritabanı, semantic search |
-| **YOLOv8** | 8.1 | Nesne algılama, hastalık tespiti |
-| **Vite + React** | 6.x | Modern SPA frontend, HMR |
-| **TailwindCSS** | 3.x | Utility-first CSS, responsive design |
-| **Docker** | - | Containerization, servis orkestrasyonu |
-
----
-
-## 🚀 Kurulum & Çalıştırma
-
-### Gereksinimler
-- **Docker & Docker Compose**
-- **Ollama** (`brew install ollama`)
-- Python 3.11+ (yerel geliştirme için)
-- Node.js 20+ (yerel geliştirme için)
-
-### 1. Ollama Modellerini Yükle
+### 1. Pull Local Models
 ```bash
 ollama pull llama3.2
 ollama pull nomic-embed-text
-ollama serve  # arka planda çalıştır
+ollama serve
 ```
 
-### 2. Docker ile Tek Komutta Başlat
+### 2. Boot the Infrastructure
 ```bash
 git clone https://github.com/saciducak/Topraks-z-Tar-m-icin-production-ready-agent.git
 cd Topraks-z-Tar-m-icin-production-ready-agent
@@ -80,69 +56,18 @@ cd Topraks-z-Tar-m-icin-production-ready-agent
 docker-compose up --build -d
 ```
 
-### 3. Tarayıcıda Aç
-| Servis | Adres |
-|--------|-------|
-| 🖥️ Frontend | http://localhost:3005 |
-| 📡 Backend API | http://localhost:8000 |
-| 📖 Swagger Docs | http://localhost:8000/docs |
-| 🗄️ Qdrant Dashboard | http://localhost:6333/dashboard |
-
-### 4. Ollama Durum Kontrolü (Ayrı Terminal)
+### 3. Ingest Knowledge Base
+To populate Qdrant with the latest agricultural literature (chunked and vectorized):
 ```bash
-# Tek seferlik kontrol
-curl -s http://localhost:11434/api/tags | python3 -m json.tool
-
-# Sürekli izleme (her 5 saniyede bir)
-watch -n 5 'echo "=== Ollama Status ===" && curl -s -o /dev/null -w "HTTP %{http_code}\n" http://localhost:11434/api/tags && echo "=== Models ===" && curl -s http://localhost:11434/api/tags | python3 -c "import sys,json; [print(f\"  ✅ {m[\"name\"]} ({m[\"details\"][\"parameter_size\"]})\" ) for m in json.load(sys.stdin).get(\"models\",[])]" 2>/dev/null && echo "=== Backend → Ollama ===" && docker exec topraks-z-tar-m-icin-production-ready-agent-backend-1 curl -s -o /dev/null -w "HTTP %{http_code}\n" http://host.docker.internal:11434/api/tags 2>/dev/null'
+cd backend
+python3 -m src.scripts.ingest
 ```
 
----
+## 📡 Endpoints Overview
 
-## 📁 Proje Yapısı
-
-```
-├── backend/
-│   ├── src/
-│   │   ├── agents/           # LangGraph Agent'ları
-│   │   │   ├── graph.py      # DAG workflow tanımı
-│   │   │   ├── vision_agent.py   # Görüntü analizi (YOLO + Color)
-│   │   │   ├── rag_agent.py      # RAG bilgi arama + LLM
-│   │   │   └── decision_agent.py # LLM-powered tedavi önerileri
-│   │   ├── services/         # İş mantığı servisleri
-│   │   │   ├── vision.py     # YOLOv8 + HSV renk analizi
-│   │   │   ├── rag.py        # Qdrant + Ollama LLM
-│   │   │   └── embeddings.py # Vektör embedding üretimi
-│   │   ├── api/              # FastAPI endpoint'leri
-│   │   ├── config.py         # Pydantic settings
-│   │   └── main.py           # Uygulama giriş noktası
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── pages/Home.tsx    # Ana analiz sayfası
-│   │   ├── components/       # React bileşenleri
-│   │   └── index.css         # TailwindCSS + Premium stiller
-│   ├── Dockerfile
-│   └── vite.config.ts
-├── models/                   # YOLO model dosyaları
-├── docker-compose.yml        # Servis orkestrasyonu
-└── .env                      # Ortam değişkenleri
-```
+- `POST /api/v1/analyze`: Core pipeline trigger. Accepts multipart image + JSON sensor telemetry.
+- `POST /api/v1/chat`: Conversational memory endpoint for follow-up mitigation questions.
+- `GET /api/v1/models/status`: Health check for YOLO weights, Ollama socket, and Qdrant readiness.
 
 ---
-
-## 🔬 API Endpointleri
-
-| Method | Endpoint | Açıklama |
-|--------|----------|----------|
-| `POST` | `/api/v1/analyze` | Görsel + sensör verisi ile tam analiz |
-| `POST` | `/api/v1/chat` | Tarım asistanı sohbet |
-| `GET`  | `/api/v1/models/status` | YOLO, Ollama, Qdrant durum kontrolü |
-| `POST` | `/api/v1/knowledge/search` | Bilgi tabanında arama |
-| `GET`  | `/health` | Sistem sağlık kontrolü |
-
----
-
-## 📄 Lisans
-MIT License - 2025 AgroCortex AI Platform
+*Built with a focus on local inference, architectural modularity, and deterministic fallback mechanisms.*
