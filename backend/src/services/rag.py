@@ -313,10 +313,31 @@ async def add_document(
     title: str = None,
     source: str = None,
     metadata: dict = None,
-    settings = None
+    settings = None,
+    chunk_size: int = 1000,
+    chunk_overlap: int = 200
 ) -> str:
-    """Add a document to the knowledge base."""
+    """
+    Add a document to the knowledge base with automatic chunking.
+    
+    Long documents are split into semantically meaningful chunks using
+    RecursiveCharacterTextSplitter. Each chunk is stored as a separate
+    vector point in Qdrant, linked by a shared doc_id in metadata.
+    
+    Args:
+        content: Full document text
+        title: Document title
+        source: Source identifier (filename, URL, etc.)
+        metadata: Additional metadata dict
+        settings: Application settings
+        chunk_size: Max characters per chunk (default 1000)
+        chunk_overlap: Character overlap between chunks (default 200)
+        
+    Returns:
+        doc_id: The parent document ID (all chunks share this)
+    """
     from ..config import get_settings
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
     
     if settings is None:
         settings = get_settings()
@@ -325,29 +346,100 @@ async def add_document(
     if not client:
         raise Exception("Qdrant is not available")
     
+    doc_id = str(uuid.uuid4())
+    
     try:
-        embedding = await get_single_embedding(content, settings)
-        doc_id = str(uuid.uuid4())
+        # ── Chunk the document ──
+        # RecursiveCharacterTextSplitter tries to split on:
+        #   1. "\n\n" (paragraphs)  2. "\n" (lines)  3. " " (words)
+        # This preserves semantic boundaries as much as possible.
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
         
-        client.upsert(
-            collection_name=settings.qdrant_collection,
-            points=[
+        chunks = splitter.split_text(content)
+        
+        # If text is very short, no splitting needed — keep as-is
+        if not chunks:
+            chunks = [content]
+        
+        logger.info(f"Document '{title}' split into {len(chunks)} chunk(s)")
+        
+        # ── Generate embeddings for all chunks ──
+        from .embeddings import get_embeddings
+        chunk_embeddings = await get_embeddings(chunks, settings)
+        
+        # ── Build Qdrant points ──
+        points = []
+        for i, (chunk_text, embedding) in enumerate(zip(chunks, chunk_embeddings)):
+            point_id = str(uuid.uuid4())
+            points.append(
                 PointStruct(
-                    id=doc_id,
+                    id=point_id,
                     vector=embedding,
                     payload={
                         "title": title or "Adsız Belge",
-                        "content": content,
+                        "content": chunk_text,
                         "source": source or "",
+                        "doc_id": doc_id,
+                        "chunk_index": i,
+                        "total_chunks": len(chunks),
                         "metadata": metadata or {}
                     }
                 )
-            ]
+            )
+        
+        # ── Batch upsert to Qdrant ──
+        client.upsert(
+            collection_name=settings.qdrant_collection,
+            points=points
         )
         
-        logger.info(f"Added document: {doc_id}")
+        logger.info(f"Added document '{title}' ({len(chunks)} chunks) with doc_id: {doc_id}")
         return doc_id
         
     except Exception as e:
         logger.error(f"Failed to add document: {e}")
         raise
+
+
+async def add_documents_bulk(
+    documents: list[dict],
+    settings = None,
+    chunk_size: int = 1000,
+    chunk_overlap: int = 200
+) -> list[str]:
+    """
+    Bulk-add multiple documents to the knowledge base.
+    
+    Each document dict should have:
+        - content (str): The document text (required)
+        - title (str): Document title
+        - source (str): Source identifier
+        - metadata (dict): Additional metadata
+    
+    Returns:
+        List of doc_ids for each ingested document.
+    """
+    doc_ids = []
+    for i, doc in enumerate(documents, 1):
+        try:
+            doc_id = await add_document(
+                content=doc["content"],
+                title=doc.get("title", f"Belge {i}"),
+                source=doc.get("source", ""),
+                metadata=doc.get("metadata"),
+                settings=settings,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap
+            )
+            doc_ids.append(doc_id)
+        except Exception as e:
+            logger.error(f"Failed to ingest document {i} ('{doc.get('title', '?')}'): {e}")
+            doc_ids.append(None)
+    
+    logger.info(f"Bulk ingestion complete: {len([d for d in doc_ids if d])}/{len(documents)} succeeded")
+    return doc_ids

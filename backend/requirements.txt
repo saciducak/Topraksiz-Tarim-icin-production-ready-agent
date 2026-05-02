@@ -9,6 +9,7 @@ python-multipart==0.0.6
 langgraph
 langchain
 langchain-community
+langchain-text-splitters
 
 # Ollama
 ollama==0.1.6
