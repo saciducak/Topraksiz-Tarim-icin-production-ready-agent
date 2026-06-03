@@ -98,61 +98,8 @@ stateDiagram-v2
 
 ---
 
-## 🧩 Module Reference
-
-### Backend Services (`backend/src/services/`)
-
-| File | Function | Description |
-|------|----------|-------------|
-| `vision.py` | `analyze_image_with_yolo()` | Dual-layer detection: YOLOv8 inference → HSV color analysis fallback. Returns `detections[]` with bounding boxes, confidence scores, and source labels. |
-| `vision.py` | `analyze_colors_for_disease()` | HSV-space heuristic analysis. Detects 5 anomaly types: brown spots (fungal), yellow patches (chlorosis), dark areas (necrosis), red-brown spots (bacterial), white patches (mildew). |
-| `vision.py` | `is_plant()` | Pre-filter validation using green/earth-tone pixel ratio to reject non-plant images before inference. |
-| `rag.py` | `add_document()` | Ingests text with automatic chunking via `RecursiveCharacterTextSplitter`. Each chunk stored as a separate vector point in Qdrant with `doc_id` and `chunk_index` metadata. |
-| `rag.py` | `search_knowledge_base()` | Embeds user query → Qdrant nearest-neighbor search (COSINE) → returns top-k results. Falls back to keyword-matched `FALLBACK_KNOWLEDGE` when Qdrant is offline. |
-| `rag.py` | `generate_answer()` | Constructs an LLM prompt with retrieved context chunks and generates a Markdown-formatted academic response via Ollama. |
-| `rag.py` | `add_documents_bulk()` | Batch ingestion for multiple documents. Iterates `add_document()` per file with error isolation. |
-| `embeddings.py` | `get_embeddings()` | Batch embedding via Ollama HTTP API (`/api/embeddings`). Produces 768-d float vectors from `nomic-embed-text`. |
-| `document_loader.py` | `load_directory()` | Recursive file scanner supporting `.pdf` (pypdf), `.docx` (python-docx), `.md`, `.txt`. Returns structured `[{content, title, source}]`. |
-
-### Agent Layer (`backend/src/agents/`)
-
-| File | Function | Description |
-|------|----------|-------------|
-| `graph.py` | `create_analysis_graph()` | Compiles the LangGraph `StateGraph` with 4 nodes: vision → (conditional) rag → decision → response. |
-| `graph.py` | `should_use_rag()` | Conditional edge: routes to RAG if `has_disease=True` or `query` exists. Currently always routes to RAG for comprehensive coverage. |
-| `graph.py` | `run_analysis_pipeline()` | Public entry point. Creates `AgentState`, invokes compiled graph via `ainvoke()`, returns structured result dict. |
-| `state.py` | `AgentState` | TypedDict defining the shared state schema across all agents: inputs (image, query, sensors), per-agent outputs, and metadata. |
-| `vision_agent.py` | `vision_node()` | Calls `analyze_image_with_yolo()`, enriches detections with Turkish display names, computes `has_disease` flag. |
-| `rag_agent.py` | `rag_node()` | Builds a search query from detections + sensor data, executes vector search, generates LLM-augmented academic response. |
-| `decision_agent.py` | `decision_node()` | Sends detection summary + RAG context + sensor telemetry to LLM with a strict JSON output schema. Parses structured `recommendations[]`. Falls back to template-based recommendations on LLM failure. |
-
-### API Endpoints (`backend/src/api/routes.py`)
-
-| Method | Endpoint | Input | Output |
-|--------|----------|-------|--------|
-| `POST` | `/api/v1/analyze` | `multipart/form-data` (image + optional query + optional sensor JSON) | `{vision, rag, recommendations[], summary}` |
-| `POST` | `/api/v1/chat` | `{message, history[]}` | `{message, sources[]}` |
-| `GET` | `/api/v1/models/status` | — | `{yolo: {...}, ollama: {...}}` |
-| `POST` | `/api/v1/knowledge/search` | `{query, top_k}` | `{query, results[]}` |
-| `GET` | `/health` | — | `{status, timestamp}` |
-
----
-
 ## 🐳 Docker Deployment
 
-```mermaid
-graph LR
-    subgraph "Docker Compose"
-        B["backend<br/>:8000<br/>FastAPI + YOLO + LangGraph"]
-        F["frontend<br/>:3005 → :5173<br/>Vite + React"]
-        Q["qdrant<br/>:6333 / :6334<br/>Vector Storage"]
-    end
-    O["Ollama<br/>:11434<br/>Host Machine"]
-
-    F -->|"/api proxy"| B
-    B --> Q
-    B -->|"host.docker.internal"| O
-```
 
 ```bash
 # 1. Start Ollama on host
